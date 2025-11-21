@@ -1,0 +1,35 @@
+name: Deploy to EC2 on Push
+
+on:
+  push:
+    branches:
+      - main  # or 'master' if your branch is named that
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd /home/ubuntu/CRM-Backend
+            git pull origin main
+            npm install
+
+            # Try to restart if already running, else start
+            pm2 describe CRM-backend > /dev/null
+            if [ $? -eq 0 ]; then
+              pm2 restart CRM-backend
+            else
+              pm2 start npm --name CRM-backend -- start
+            fi
+
+            pm2 save
