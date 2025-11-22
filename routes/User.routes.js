@@ -4,80 +4,63 @@ const router = express.Router();
 const userController = require("../controllers/User.controller");
 const auth = require("../middleware/auth");
 
-// Public routes
+// ------------------------------
+// PUBLIC ROUTES
+// ------------------------------
 router.post("/signup", userController.signupLocal);
 router.post("/login", userController.login);
 router.post("/forgot-password", userController.forgotPassword);
 router.post("/reset-password", userController.resetPassword);
 router.post("/logout", auth(), userController.logout);
 
-// Role-specific protected routes
+// ------------------------------
+// DASHBOARD ROUTES (ROLE-BASED)
+// ------------------------------
 router.get("/admin", auth(["Admin"]), userController.getAdminDashboard);
 router.get("/tl", auth(["TL"]), userController.getTLDashboard);
-router.post(
-  "/admin/toggle-login",
-  auth(),
-  userController.toggleUserLoginAccess
-);
-router.get(
-  "/executive",
-  auth(["Executive"]),
-  userController.getExecutiveDashboard
-);
+router.get("/executive", auth(["Executive"]), userController.getExecutiveDashboard);
 
-// General profile route
-router.get("/profile", auth(), userController.getUserProfile); // No role restriction
+// ------------------------------
+// PROFILE ROUTES
+// ------------------------------
+router.get("/profile", auth(), userController.getUserProfile);
+router.get("/admin/profile", auth(["Admin"]), userController.getAdminById);
+router.put("/admin/profile", auth(["Admin"]), userController.updateAdminProfile);
+router.put("/user/profile/:id", auth(), userController.updateUserProfile);
 
-// admin settings
-router.get("/admin/profile", auth(["Admin"]), userController.getAdminById); // ✅ Fetch admin profile
+router.post("/admin/change_pass", auth(["Admin"]), userController.changePassword);
 
-router.put(
-  "/admin/profile",
-  auth(["Admin"]),
-  userController.updateAdminProfile
-); // ✅ Update admin profile
+// ------------------------------
+// MANAGEMENT ROUTES
+// ------------------------------
+router.get("/executives", auth(["Admin"]), userController.getAllExecutives);
+router.get("/executives/:id", auth(["Admin"]), userController.getExecutiveById);
 
-router.put("/user/profile/:id", auth(), userController.updateUserProfile); //can update profiles of executives as well as tl
+router.get("/team-leads", auth(["Admin"]), userController.getAllTeamLeads);
+router.get("/tls/:id", auth(["Admin"]), userController.getTLById);
 
-router.post("/admin/change_pass", auth(), userController.changePassword); // ✅ Change admin password
+// ------------------------------
+// ONLINE USERS
+// ------------------------------
+router.get("/online", auth(["Admin", "TL", "Manager"]), userController.getOnlineExecutives);
 
-// New protected routes with proper authorization
-router.get("/executives", auth(), userController.getAllExecutives);
-router.get(
-  "/team-leads",
-  auth(), // Only Admin can access
-  userController.getAllTeamLeads
-);
-router.get(
-  "/executives/:id", //For executive info popover
-  auth(),
-  userController.getExecutiveById
-);
-
-router.get("/tls/:id", auth(), userController.getTLById);
-
-// Get online users (accessible to Admin and TL)
-router.get(
-  "/online",
-  auth(["Admin", "TL", "Manager"]),
-  userController.getOnlineExecutives
-);
-
-//create executive and send otp to verify email
-router.post(
-  "/create-executive",
-  auth(["Admin"]),
-  userController.createExecutiveWithOtp
-);
-
-//verify the otp
-router.post("/verify-otp", auth(["Admin"]), userController.verifyExecutiveOTP);
-
-//resedn otp
-router.post("/resend-otp", userController.resendExecutiveOtp);
-
-router.post("/create-admin", auth(["Admin"]), userController.createAdmin);
+// ------------------------------
+// EXECUTIVE CREATION (DIRECT) — NO OTP
+// ------------------------------
 router.post("/create-exec", auth(["Admin"]), userController.createExecutive);
+
+// ------------------------------
+// OTHER CREATION ROUTES
+// ------------------------------
+router.post("/create-admin", auth(["Admin"]), userController.createAdmin);
 router.post("/create-tl", auth(["Admin"]), userController.createTeamLead);
+
+// ------------------------------
+// (OPTIONAL) OLD OTP ROUTES IF EVER NEEDED
+// Commented intentionally
+// ------------------------------
+// router.post("/create-executive", auth(["Admin"]), userController.createExecutiveWithOtp);
+// router.post("/verify-otp", auth(["Admin"]), userController.verifyExecutiveOTP);
+// router.post("/resend-otp", userController.resendExecutiveOtp);
 
 module.exports = router;
