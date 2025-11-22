@@ -59,7 +59,7 @@ app.get("/api/ping", (req, res) => {
 const io = new Server(server, {
   cors: {
     origin: [
-      "https://crm-frontend-delta-ebon.vercel.app",
+      "https://frontend-fbpkrxwss-sagar4036s-projects.vercel.app",
       "http://localhost:3000",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
