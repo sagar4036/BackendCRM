@@ -111,6 +111,10 @@ protectedRoutes.forEach(([path, route]) => {
   app.use(`/api/${path}`, auth(), tenantResolver, route);
 });
 
+// Handle CORS for processperson (fix)
+app.options("/api/processperson/*", cors(corsOptions));
+app.options("/api/processperson", cors(corsOptions));
+
 // Public tenant routes
 const publicRoutes = [
   ["", require("./routes/User.routes")],
