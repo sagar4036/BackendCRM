@@ -26,15 +26,15 @@ const server = http.createServer(app);
 
 // ================== ⚙️ GLOBAL MIDDLEWARES ==================
 
-// ✅ Secure CORS (no wildcard, no open CORS)
+// Secure global CORS
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-// ✅ Body & cookie parser
+// Body + cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Request logger (optional)
+// Request logger
 app.use((req, res, next) => {
   console.log("📥 [REQUEST]", {
     method: req.method,
@@ -44,7 +44,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🚑 Health check
+// Health check
 app.get("/api/ping", (req, res) => {
   res.send("✅ Backend reachable! CORS working correctly.");
 });
@@ -73,7 +73,7 @@ app.use((req, res, next) => {
 app.use("/api/masteruser", require("./routes/MasterUser.routes"));
 app.use("/api/company", require("./routes/Company.routes"));
 
-// Protected tenant routes
+// ------------------- PROTECTED TENANT ROUTES -------------------
 const protectedRoutes = [
   ["crew", require("./routes/Agents.routes")],
   ["leads", require("./routes/Lead.routes")],
@@ -108,14 +108,12 @@ const protectedRoutes = [
 
 // Protected mounting
 protectedRoutes.forEach(([path, route]) => {
+  app.options(`/api/${path}`, cors(corsOptions));
+  app.options(`/api/${path}/*`, cors(corsOptions));
   app.use(`/api/${path}`, auth(), tenantResolver, route);
 });
 
-// Handle CORS for processperson (fix)
-app.options("/api/processperson/*", cors(corsOptions));
-app.options("/api/processperson", cors(corsOptions));
-
-// Public tenant routes
+// --------------------- PUBLIC TENANT ROUTES ----------------------
 const publicRoutes = [
   ["", require("./routes/User.routes")],
   ["manager", require("./routes/Manager.routes")],
@@ -132,8 +130,10 @@ const publicRoutes = [
   ["customer", require("./routes/CustomerDocuments.routes")],
 ];
 
-// Public mounting
+// FIXED PUBLIC ROUTES (correct OPTIONS handling)
 publicRoutes.forEach(([path, route]) => {
+  app.options(`/api/${path}`, cors(corsOptions));
+  app.options(`/api/${path}/*`, cors(corsOptions));
   app.use(`/api/${path}`, tenantResolver, route);
 });
 
@@ -201,7 +201,7 @@ const PORT = process.env.PORT || 5000;
   await syncDatabase();
 
   if (process.env.NODE_ENV !== "test") {
-    server.listen(PORT, () => 
+    server.listen(PORT, () =>
       console.log(`🚀 Server running on port ${PORT}`)
     );
   }
