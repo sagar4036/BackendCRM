@@ -25,16 +25,12 @@ const app = express();
 const server = http.createServer(app);
 
 // ================== ⚙️ GLOBAL MIDDLEWARES ==================
-
-// Secure global CORS
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-// Body + cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// Request logger
 app.use((req, res, next) => {
   console.log("📥 [REQUEST]", {
     method: req.method,
@@ -46,7 +42,7 @@ app.use((req, res, next) => {
 
 // Health check
 app.get("/api/ping", (req, res) => {
-  res.send("✅ Backend reachable! CORS working correctly.");
+  res.send("✅ Backend reachable! CORS working.");
 });
 
 // ================== 🔌 SOCKET.IO SETUP ==================
@@ -61,7 +57,6 @@ const io = new Server(server, {
   },
 });
 
-// Attach socket to req
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -69,7 +64,12 @@ app.use((req, res, next) => {
 
 // ================== 📁 ROUTES ==================
 
-// Master routes
+// ---------- PUBLIC ROUTES (NO tenantResolver, NO auth) ----------
+
+// 🔥🔥🔥 MOST IMPORTANT — ProcessPerson signup/login must be PUBLIC
+app.use("/api/processperson", require("./routes/ProcessPerson.routes"));
+
+// Master routes (public)
 app.use("/api/masteruser", require("./routes/MasterUser.routes"));
 app.use("/api/company", require("./routes/Company.routes"));
 
@@ -106,19 +106,17 @@ const protectedRoutes = [
   ["close-leads", require("./routes/CloseLead.routes")],
 ];
 
-// Protected mounting
 protectedRoutes.forEach(([path, route]) => {
   app.options(`/api/${path}`, cors(corsOptions));
   app.options(`/api/${path}/*`, cors(corsOptions));
   app.use(`/api/${path}`, auth(), tenantResolver, route);
 });
 
-// --------------------- PUBLIC TENANT ROUTES ----------------------
+// ---------------------- PUBLIC TENANT ROUTES ----------------------
 const publicRoutes = [
   ["", require("./routes/User.routes")],
   ["manager", require("./routes/Manager.routes")],
   ["hr", require("./routes/Hr.routes")],
-  ["processperson", require("./routes/ProcessPerson.routes")],
   ["customer", require("./routes/Customer.routes")],
   ["revenue", require("./routes/RevenueChart.routes")],
   ["eod-report", require("./routes/EodReport.routes")],
@@ -130,7 +128,6 @@ const publicRoutes = [
   ["customer", require("./routes/CustomerDocuments.routes")],
 ];
 
-// FIXED PUBLIC ROUTES (correct OPTIONS handling)
 publicRoutes.forEach(([path, route]) => {
   app.options(`/api/${path}`, cors(corsOptions));
   app.options(`/api/${path}/*`, cors(corsOptions));
@@ -168,21 +165,20 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", async () => {
     const { userId, companyId } = socket;
+    if (!userId || !companyId) return;
 
-    if (userId && companyId) {
-      delete connectedUsers[userId];
+    delete connectedUsers[userId];
 
-      try {
-        const tenantDB = await getTenantDB(companyId);
-        await tenantDB.Users.update(
-          { is_online: false },
-          { where: { id: userId } }
-        );
+    try {
+      const tenantDB = await getTenantDB(companyId);
+      await tenantDB.Users.update(
+        { is_online: false },
+        { where: { id: userId } }
+      );
 
-        io.emit("status_update", { userId, is_online: false });
-      } catch (err) {
-        console.error("⚠️ Error disconnect:", err);
-      }
+      io.emit("status_update", { userId, is_online: false });
+    } catch (err) {
+      console.error("⚠️ Error disconnect:", err);
     }
   });
 });
