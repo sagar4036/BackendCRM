@@ -24,25 +24,58 @@ const tenantResolver = require("./middleware/tenantResolver");
 const app = express();
 const server = http.createServer(app);
 
-// ================== ⚙️ GLOBAL MIDDLEWARES ==================
+// ================== 🔥 GLOBAL HARD-CODED CORS (FIXES x-company-id) ==================
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  const allowedOrigins = [
+    "https://frontend-crm-seven.vercel.app",
+    "http://localhost:3000"
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-company-id"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+// ================== 🛡️ SECONDARY CORS (Safe Now) ==================
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
+// Body + Cookies
 app.use(express.json());
 app.use(cookieParser());
 
+// Request logger
 app.use((req, res, next) => {
   console.log("📥 [REQUEST]", {
     method: req.method,
     url: req.originalUrl,
     origin: req.headers.origin,
+    headers: req.headers
   });
   next();
 });
 
 // Health check
 app.get("/api/ping", (req, res) => {
-  res.send("✅ Backend reachable! CORS working.");
+  res.send("✅ Backend reachable! Global CORS working.");
 });
 
 // ================== 🔌 SOCKET.IO SETUP ==================
@@ -64,9 +97,7 @@ app.use((req, res, next) => {
 
 // ================== 📁 ROUTES ==================
 
-// ---------- PUBLIC ROUTES (NO tenantResolver, NO auth) ----------
-
-// 🔥🔥🔥 MOST IMPORTANT — ProcessPerson signup/login must be PUBLIC
+// ---------- PUBLIC ROUTES (IMPORTANT: NO tenantResolver) ----------
 app.use("/api/processperson", require("./routes/ProcessPerson.routes"));
 
 // Master routes (public)
