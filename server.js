@@ -26,21 +26,15 @@ const server = http.createServer(app);
 
 // ================== ⚙️ GLOBAL MIDDLEWARES ==================
 
-// ✅ Allow all CORS headers and handle preflight manually
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "*");
-  res.header("Access-Control-Allow-Methods", "*");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
+// ✅ Secure CORS (no wildcard, no open CORS)
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // ✅ Body & cookie parser
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Debug request logger
+// ✅ Request logger (optional)
 app.use((req, res, next) => {
   console.log("📥 [REQUEST]", {
     method: req.method,
@@ -50,36 +44,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Simple health check
+// 🚑 Health check
 app.get("/api/ping", (req, res) => {
-  res.send("✅ Backend reachable! CORS working fine.");
+  res.send("✅ Backend reachable! CORS working correctly.");
 });
 
 // ================== 🔌 SOCKET.IO SETUP ==================
 const io = new Server(server, {
   cors: {
     origin: [
-      "https://frontend-fbpkrxwss-sagar4036s-projects.vercel.app",
+      "https://frontend-crm-seven.vercel.app",
       "http://localhost:3000",
     ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
   },
 });
 
-// Attach socket instance to each request
+// Attach socket to req
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// ================== 📁 ROUTE MOUNTING ==================
+// ================== 📁 ROUTES ==================
 
-// ---- Master & Company Routes ----
+// Master routes
 app.use("/api/masteruser", require("./routes/MasterUser.routes"));
 app.use("/api/company", require("./routes/Company.routes"));
 
-// ---- Authenticated Tenant Routes ----
+// Protected tenant routes
 const protectedRoutes = [
   ["crew", require("./routes/Agents.routes")],
   ["leads", require("./routes/Lead.routes")],
@@ -99,10 +93,7 @@ const protectedRoutes = [
   ["process-history", require("./routes/ProcessFollowupHistory.routes")],
   ["role-permissions", require("./routes/RolePermission.routes")],
   ["processed", require("./routes/ProcessedFinal.routes")],
-  [
-    "process-person-activities",
-    require("./routes/ProcessPersonActivity.routes"),
-  ],
+  ["process-person-activities", require("./routes/ProcessPersonActivity.routes")],
   ["manager-activities", require("./routes/ManagerActivity.routes")],
   ["hr-activities", require("./routes/HrActivity.routes")],
   ["leave", require("./routes/LeaveApplication.routes")],
@@ -115,23 +106,13 @@ const protectedRoutes = [
   ["close-leads", require("./routes/CloseLead.routes")],
 ];
 
-// ✅ Enable OPTIONS for each protected route
+// Protected mounting
 protectedRoutes.forEach(([path, route]) => {
-  app.options(`/api/${path}`, cors(corsOptions));
-  app.use(
-    `/api/${path}`,
-    (req, res, next) => {
-      if (req.method === "OPTIONS") return res.sendStatus(200);
-      next();
-    },
-    auth(),
-    tenantResolver,
-    route
-  );
+  app.use(`/api/${path}`, auth(), tenantResolver, route);
 });
 
-// ---- Non-auth Tenant Routes ----
-const publicTenantRoutes = [
+// Public tenant routes
+const publicRoutes = [
   ["", require("./routes/User.routes")],
   ["manager", require("./routes/Manager.routes")],
   ["hr", require("./routes/Hr.routes")],
@@ -147,8 +128,8 @@ const publicTenantRoutes = [
   ["customer", require("./routes/CustomerDocuments.routes")],
 ];
 
-publicTenantRoutes.forEach(([path, route]) => {
-  app.options(`/api/${path}`, cors(corsOptions));
+// Public mounting
+publicRoutes.forEach(([path, route]) => {
   app.use(`/api/${path}`, tenantResolver, route);
 });
 
@@ -163,10 +144,7 @@ io.on("connection", (socket) => {
 
   socket.on("set_user", async ({ userId, companyId }) => {
     try {
-      if (!userId || !companyId) {
-        console.warn("⚠️ Missing userId or companyId in socket connection");
-        return;
-      }
+      if (!userId || !companyId) return;
 
       socket.userId = userId;
       socket.companyId = companyId;
@@ -180,14 +158,16 @@ io.on("connection", (socket) => {
 
       io.emit("status_update", { userId, is_online: true });
     } catch (err) {
-      console.error("⚠️ Error setting user online:", err);
+      console.error("⚠️ Error setting user:", err);
     }
   });
 
   socket.on("disconnect", async () => {
     const { userId, companyId } = socket;
+
     if (userId && companyId) {
       delete connectedUsers[userId];
+
       try {
         const tenantDB = await getTenantDB(companyId);
         await tenantDB.Users.update(
@@ -196,9 +176,8 @@ io.on("connection", (socket) => {
         );
 
         io.emit("status_update", { userId, is_online: false });
-        console.log("🔴 User disconnected:", userId);
       } catch (err) {
-        console.error("⚠️ Error setting user offline:", err);
+        console.error("⚠️ Error disconnect:", err);
       }
     }
   });
@@ -211,15 +190,16 @@ cron.schedule("* * * * *", async () => {
   await notifyScheduledFollowups();
 });
 
-// ================== 🧠 START SERVER ==================
+// ================== 🧠 SERVER START ==================
 const PORT = process.env.PORT || 5000;
 
 (async () => {
-  // ✅ Auto-sync tenant databases on deployment
   await syncDatabase();
 
   if (process.env.NODE_ENV !== "test") {
-    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    server.listen(PORT, () => 
+      console.log(`🚀 Server running on port ${PORT}`)
+    );
   }
 })();
 
